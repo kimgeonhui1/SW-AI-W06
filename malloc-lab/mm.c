@@ -37,7 +37,7 @@ team_t team = {
 /* single word (4) WSIZE or double word (8) DSIZE */
 #define WSIZE 4
 #define DSIZE 8
-#define CHUNKSIZE (1<<12) // 힙 공간 최소 할당 단위(2^12이니 4096byte -> 4KB)
+#define CHUNKSIZE (1 << 12) // 힙 공간 최소 할당 단위(2^12이니 4096byte -> 4KB)
 
 // 두 숫자 중 더 큰 숫자를 찾음
 #define MAX(x,y)    ((x) > (y) ? (x) : (y))
@@ -87,7 +87,7 @@ static void *imp_realloc(void *ptr, size_t size);
 // bp
 static char *heap_listp = 0;
 // Next Fit을 위한 변수
-// static char *last_bp = 0;
+static char *last_bp = 0;
 
 /*
  * mm_init - initialize the malloc package.
@@ -105,7 +105,7 @@ int mm_init(void)
     // Heap의 시작점을 가리키던 heap_listp를 8을 더하여 (Padding 4byte, Header 4byte)
     // bp(heap_listp)를 Prologue header의 바로 뒤로 이동시킴
     heap_listp += (2 * WSIZE);
-    // last_bp = heap_listp; 
+    last_bp = heap_listp; 
 
     // 힙을 늘릴 수 없으면 return -1(에러 발생)
     if (extend_heap(CHUNKSIZE / WSIZE) == NULL) return -1;
@@ -187,31 +187,31 @@ void *mm_malloc(size_t size)
 static void *find_fit(size_t asize){
     //first fit / next fit / best fit 방법으로 할당시킬 블록을 선택
     // first fit
-    char *bp;
-    // 블록들을 돌면서 할당중이지 않고, 빈 블록의 크기가 할당에 필요한 크기보다 같거나 크다면 해당 블록의 주소 반환
-    for(bp = heap_listp; GET_SIZE(HDRP(bp)); bp = NEXT_BLKP(bp)){
+    // char *bp;
+    // // 블록들을 돌면서 할당중이지 않고, 빈 블록의 크기가 할당에 필요한 크기보다 같거나 크다면 해당 블록의 주소 반환
+    // for(bp = heap_listp; GET_SIZE(HDRP(bp)); bp = NEXT_BLKP(bp)){
 
-        if((GET_ALLOC(HDRP(bp)) == 0) && (asize <= GET_SIZE(HDRP(bp)))) return bp;
+    //     if((GET_ALLOC(HDRP(bp)) == 0) && (asize <= GET_SIZE(HDRP(bp)))) return bp;
     
-    }
+    // }
 
     // next fit
-    // char *bp = last_bp;
-    // // 1. 마지막으로 할당했던 위치부터 끝까지 쭉 찾기
-    // for (; GET_SIZE(HDRP(bp)) > 0; bp = NEXT_BLKP(bp)) {
-    //     if (!GET_ALLOC(HDRP(bp)) && (asize <= GET_SIZE(HDRP(bp)))) {
-    //         last_bp = bp; // 찾으면 그 위치 기억!
-    //         return bp;
-    //     }
-    // }
+    char *bp = last_bp;
+    // 1. 마지막으로 할당했던 위치부터 끝까지 쭉 찾기
+    for (; GET_SIZE(HDRP(bp)) > 0; bp = NEXT_BLKP(bp)) {
+        if (!GET_ALLOC(HDRP(bp)) && (asize <= GET_SIZE(HDRP(bp)))) {
+            last_bp = bp; // 찾으면 그 위치 기억!
+            return bp;
+        }
+    }
 
-    // // 2. 끝까지 갔는데 없으면? 힙의 맨 앞부터 아까 출발했던 곳까지만 다시 찾기
-    // for (bp = heap_listp; bp < last_bp; bp = NEXT_BLKP(bp)) {
-    //     if (!GET_ALLOC(HDRP(bp)) && (asize <= GET_SIZE(HDRP(bp)))) {
-    //         last_bp = bp; // 찾으면 그 위치 기억!
-    //         return bp;
-    //     }
-    // }
+    // 2. 끝까지 갔는데 없으면? 힙의 맨 앞부터 아까 출발했던 곳까지만 다시 찾기
+    for (bp = heap_listp; bp < last_bp; bp = NEXT_BLKP(bp)) {
+        if (!GET_ALLOC(HDRP(bp)) && (asize <= GET_SIZE(HDRP(bp)))) {
+            last_bp = bp; // 찾으면 그 위치 기억!
+            return bp;
+        }
+    }
     // best fit
 
     // 찾지 못했을 때 (할당시켜야 할 만큼의 블록이 없을 때)
@@ -228,7 +228,7 @@ static void place(void *bp, size_t asize){
     size_t size_left = size - asize;
 
     // 할당 후 남은 크기가 16바이트 이상일 때
-    if (size_left >= 3 * DSIZE){
+    if (size_left >= 2 * DSIZE){
         // 할당한 블록의 Header/Footer 정의
         PUT(HDRP(bp), PACK(asize, 1));
         PUT(FTRP(bp), PACK(asize, 1));
@@ -306,9 +306,9 @@ static void *coalesce(void *bp){
         bp = PREV_BLKP(bp);
     }
 
-    // if ((last_bp > (char *)bp) && (last_bp < NEXT_BLKP(bp))) {
-    //     last_bp = bp; // 합쳐진 거대한 블록의 시작점으로 last_bp 당겨주기
-    // }
+    if ((last_bp > (char *)bp) && (last_bp < NEXT_BLKP(bp))) {
+        last_bp = bp; // 합쳐진 거대한 블록의 시작점으로 last_bp 당겨주기
+    }
 
 
     // 블록의 시작점(bp) return
@@ -334,7 +334,7 @@ static void *imp_realloc(void *ptr, size_t size){
     size_t prev_alloc, prev_size, next_alloc, next_size, total_size;
 
 
-    // last_bp = heap_listp;
+    last_bp = heap_listp;
 
     oldptr = ptr;
     old_size = GET_SIZE(HDRP(oldptr));
@@ -369,7 +369,7 @@ static void *imp_realloc(void *ptr, size_t size){
     }
 
     // Case 2 : 다음 블록과 병합
-    else if (prev_alloc && !next_alloc && (old_size + next_size >= asize)) {
+    if (prev_alloc && !next_alloc && (old_size + next_size >= asize)) {
         total_size = old_size + next_size;
         
         PUT(HDRP(oldptr), PACK(total_size, 1));
@@ -381,7 +381,7 @@ static void *imp_realloc(void *ptr, size_t size){
     }
 
     // Case 3 : 앞/뒤 블록과 모두 병합
-    else if (!prev_alloc && !next_alloc && (old_size + next_size + prev_size >= asize)) {
+    if (!prev_alloc && !next_alloc && (old_size + next_size + prev_size >= asize)) {
         total_size = old_size + next_size + prev_size;
         newptr = PREV_BLKP(oldptr);
 
